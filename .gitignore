@@ -1,0 +1,17 @@
+.DS_Store
+._*
+.build/
+.build-local/
+.swiftpm/
+dist/
+*.app/
+*.dmg
+*.zip
+*.log
+.env
+.env.*
+*.p12
+*.pfx
+*.keychain
+*.keychain-db
+xcuserdata/
