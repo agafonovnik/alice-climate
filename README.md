@@ -4,6 +4,11 @@
 
 Выбор комнаты, обновление раз в минуту и статус датчиков. Токен хранится в Связке ключей macOS.
 
+![Меню](./status-bar.jpg)
+
+
+![Окно](./view.jpg)
+
 ## Сборка
 
 Нужны macOS 13+ и Xcode Command Line Tools (`xcode-select --install`).
