@@ -67,34 +67,21 @@ import ClimateCore
         let home = try await api.home(token: token)
         var result = home.climateReadings
         // user/info returns cached properties; query sensor details to obtain their online state.
-        // Only climate-capable devices and sensors are queried; four requests at a time.
+        // Query one device at a time: completing concurrent child tasks has caused
+        // crashes in the Swift concurrency runtime on some systems.
         let candidates = home.devices.filter { $0.isClimateCandidate }
         var failedIDs = Set<String>()
-        for offset in stride(from: 0, to: candidates.count, by: 4) {
-            let chunk = Array(candidates[offset..<min(offset + 4, candidates.count)])
-            let responses = await withTaskGroup(of: (String, Result<Device, Error>).self) { group in
-                for device in chunk {
-                    group.addTask { [api] in
-                        do { return (device.id, .success(try await api.device(id: device.id, token: token))) }
-                        catch { return (device.id, .failure(error)) }
-                    }
+        for candidate in candidates {
+            do {
+                let device = try await api.device(id: candidate.id, token: token)
+                let room = home.rooms?.first { $0.id == device.room }?.name ?? home.rooms?.first { $0.id == candidate.room }?.name ?? ""
+                if let reading = device.climateReading(room: room, previous: result.first { $0.id == candidate.id }) {
+                    result.removeAll { $0.id == candidate.id }
+                    result.append(reading)
                 }
-                var answers: [(String, Result<Device, Error>)] = []
-                for await answer in group { answers.append(answer) }
-                return answers
-            }
-            for (id, response) in responses {
-                switch response {
-                case .success(let device):
-                    let room = home.rooms?.first { $0.id == device.room }?.name ?? home.devices.first { $0.id == id }.flatMap { original in home.rooms?.first { $0.id == original.room }?.name } ?? ""
-                    if let reading = device.climateReading(room: room, previous: result.first { $0.id == id }) {
-                        result.removeAll { $0.id == id }
-                        result.append(reading)
-                    }
-                case .failure(let failure):
-                    if let failure = failure as? APIError, failure == .unauthorized || failure == .rateLimited { throw failure }
-                    failedIDs.insert(id)
-                }
+            } catch {
+                if let failure = error as? APIError, failure == .unauthorized || failure == .rateLimited { throw failure }
+                failedIDs.insert(candidate.id)
             }
         }
         let warning = failedIDs.isEmpty ? nil : "Не все устройства ответили (\(failedIDs.count)). Часть значений — из последнего состояния в облаке."
